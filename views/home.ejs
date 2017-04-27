@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/js/voipClient.js"></script>
+  <link rel="stylesheet" href="/css/voipClient.css">
+</head>
+
+<body>
+    <div class="voipDisplay_div">
+        <div class = "sendSignal_div">
+          <label>Record Levels</label>
+        </div>
+        <audio class = "testAudio" src = "nobodyHome.mp4" controls></audio>
+        <div class = "info_div">
+          <label class = "info_label">Send Data:</label><br>
+          <label class = "info_label">info1</label><br>
+          <label class = "info_label">info2</label><br>
+          <label class = "info_label">info3</label><br>
+          <label class = "info_label">info4</label><br>
+          <label class = "info_label">info5</label><br>
+          <label class = "info_label">info6</label><br>
+          <label class = "info_label">info7</label><br>
+          <label class = "info_label">info8</label><br>
+          <label class = "info_label">info9</label><br><br>
+          <label class = "info_label">Receive data:</label><br>
+          <label class = "info_label">info11</label><br>
+          <label class = "info_label">info12</label><br>
+          <label class = "info_label">info13</label><br>
+          <label class = "info_label">info14</label><br>
+          <label class = "info_label">info15</label><br>
+          <label class = "info_label">info16</label><br>
+          <label class = "info_label">info17</label><br>
+          <label class = "info_label">info18</label><br>
+          <label class = "info_label">info19</label><br>
+          <label class = "info_label">info20</label><br>
+          <label class = "info_label">info21</label><br>
+          <label class = "info_label">info22</label><br>
+          <label class = "info_label">info23</label><br>
+          <label class = "info_label">info24</label><br>
+          <label class = "info_label">info25</label><br>
+        </div>
+    </div>
+  <script>
+    var userData = <%-JSON.stringify(userData, undefined, "\t");%>;
+    var infoLabels = document.getElementsByClassName("info_label");
+    (function(){
+        function log(message){
+            console.log("------------    voipDemo - home.ejs    ------------\n"+message);
+        }
+        
+        function init(){
+            var
+                voipDisplay_div = document.getElementsByClassName("voipDisplay_div")[0],
+                sendSignal_div = voipDisplay_div.getElementsByClassName("sendSignal_div")[0],
+                voipConnection
+            ;
+            log(
+                "creating a voip connection, voip.connect(..) with \nuserData.voipConnection:\n"+
+                JSON.stringify(userData.voipConnection, undefined, true)
+            );
+            voipConnection = new VoipConnection(userData.voipConnection);
+            VoipConnection.getMicrophoneStream(
+              function(error, stream){
+                if(error){
+                  var  audio = document.getElementsByClassName("testAudio")[0];
+                  stream = VoipConnection.audioContext.createMediaElementSource(audio);
+                  voipConnection.mediaStream = stream;
+                  audio.play();
+                  voipConnection.startBroadcasting();
+                }else{
+                  voipConnection.mediaStream = stream;
+                  voipConnection.startBroadcasting();
+                }
+              }
+            );
+            sendSignal_div.appendChild(voipConnection.getRecordingLevelDiv());
+            
+        }
+        window.onload = init();    
+    })();
+  </script>
+</body>
+</html>
