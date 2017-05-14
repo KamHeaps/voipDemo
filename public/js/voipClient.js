@@ -2,7 +2,6 @@
 function infoLog(index, message){
     infoLabels[index].innerHTML = message;
 }
-
 var VoipConnection;
 (function(){
 function log(message){
@@ -11,207 +10,73 @@ function log(message){
 
 VoipConnection = (function(){
     function VoipPlayer(){
-        function getPlayerWorker(){
-            function PlayerWorker(){
-                function log(message){
-                    console.log(
-                        "--------------------   VoipPlayer.PlayerWorker   --------------------\n"+
-                        message
-                    );
-                }
-                function addArrayBuffer(arrayBuffer){
-                    function arrayBufferToBufferData(arrayBuffer){
-                        var
-                            result = {
-                                arrayBuffer:arrayBuffer
-                            },
-                            floatBufferSize,// in floats => bufferSize in bytes / 4 bytes/float
-                            bufferIndex = 0,
-                            uInt32s,
-                            float32s
-                        ;
-                        uInt32s = new Uint32Array(arrayBuffer, bufferIndex, 4);
-                        result.channelCount    = uInt32s[0];
-                        result.sampleRate      = uInt32s[1];
-                        result.bufferDataIndex = uInt32s[2];
-                        result.bufferSize      = uInt32s[3];
-                        bufferIndex += 16;
-                        
-                        float32s = new Float32Array(arrayBuffer, bufferIndex, 2);
-                        result.startTime = float32s[0];
-                        result.audioContextT0 = float32s[1];
-                        bufferIndex += 8;
-                        
-                        floatBufferSize = result.bufferSize * 4096 / 4;// in floats => bufferSize in bytes / 4 bytes/float
-                        result.float32Buffer0 = new Float32Array(arrayBuffer, bufferIndex, floatBufferSize);
-                        bufferIndex += (floatBufferSize * 4);
-                        result.float32Buffer1 = new Float32Array(arrayBuffer, bufferIndex, floatBufferSize);
-                        return result;                    
-                    }
-                    var
-                        bufferData = arrayBufferToBufferData(arrayBuffer)
-                    ;
-                    self.postMessage(
-                        {
-                            type:"bufferData",
-                            data:{bufferData:bufferData}
-                        }
-                    );
-                }
-                function onMessage(event){
-                    var messageObject = event.data;
-                    switch(messageObject.type){
-                        case "arrayBuffer":
-                            addArrayBuffer(messageObject.data.arrayBuffer);
-                            break;
-                    }
-                }
-                
-                function init(){
-                    self.onmessage = onMessage;
-                }
-                
-                init();
-            }
-            
+        function setReceivedData(header, arrayBuffer, audioBuffer){
             var
-                workerString = ""+PlayerWorker,
-                index0,
-                index1,
-                blob
+                receivedTime = Date.now(),
+                sourceT0 = new Date(header.sourceTime0),
+                startTime = new Date(header.startTime)
             ;
-            index0 = workerString.indexOf('{');
-            index1 = workerString.lastIndexOf('}');
-            workerString = workerString.substring(index0+1, index1-1);
-            blob = new Blob([workerString], {type : 'application/javascript'});
-            return new Worker( URL.createObjectURL(blob) );
+            infoLog(11,"Index:"+header.index);
+            infoLog(12,"Source T0:"+sourceT0);
+            infoLog(13,"startTime:"+startTime);
+            if( receivedData.lastReceived !== undefined ){
+                infoLog(14,"Time between recieved buffers:"+ (receivedTime-receivedData.lastReceived) +" ms");
+            }
+            infoLog(15,"Buffer size :"+ arrayBuffer.byteLength +"bytes");
+            infoLog(16,"Buffer size :"+ (audioBuffer.duration * 1000) +" ms");
+            receivedData.lastReceived =  receivedTime;
         }
         function addArrayBuffer(arrayBuffer){
-            worker.postMessage(
-                {
-                    type:"arrayBuffer",
-                    data:{arrayBuffer:arrayBuffer}
+            function getHeader(arraybuffer){
+                function getTimeFromInts(int32Array){
+                    var
+                        str = "0x"+int32Array[0].toString(16),
+                        str1 = int32Array[1].toString(16)
+                    ;
+                    while(str1.length<8){
+                        str1 = "0"+str1;
+                    }
+                    return Number(str+str1);
                 }
-            );
-        }
-        function getAudioBuffer(bufferData){
+                var
+                    header = {
+                        length:new Int32Array(arraybuffer, 0, 1)[0],
+                        index:new Int32Array(arraybuffer, 4, 1)[0]
+                    },
+                    sourceTime0 = getTimeFromInts( new Int32Array(arraybuffer, 8, 2) ),
+                    startTime  = getTimeFromInts( new Int32Array(arraybuffer, 16, 2) )
+                ;
+                header.sourceTime0 = sourceTime0;
+                header.startTime = startTime;
+                return header;
+            }
+            
             var
-                audioBuffer = audioContext.createBuffer( bufferData.channelCount, bufferData.float32Buffer0.length, bufferData.sampleRate)
+                header = getHeader(arrayBuffer),
+                body = arrayBuffer.slice(header.length*4,arrayBuffer.byteSize),
+                source = audioContext.createBufferSource()
             ;
-            audioBuffer.copyToChannel(bufferData.float32Buffer0, 0);
-            audioBuffer.copyToChannel(bufferData.float32Buffer1, 1);
-            return audioBuffer;
-        }
-        function loadBufferData(bufferData){
-            function audioBufferEnded(){
-                // this is sourceBuffer
-                this.disconnect();
-            }
-            var
-                audioBuffer = getAudioBuffer(bufferData),
-                sourceBuffer,
-                resetPlayerOffset = false,
-                time = Date.now(),
-                playTime,
-                completeTime,
-                currentTime = audioContext.currentTime
-            ;
-            resetPlayerOffset =
-                //true ||
-                state!= "playing" ||
-                bufferData.bufferDataIndex === 0 ||
-                bufferData.audioContextT0 != loadData.sourceAdioContextT0 ||
-                (time - loadData.resetTime) > (32*1000)
-            ;
-            if(resetPlayerOffset){
-                // playerOffset play now
-                // playerOffset + bufferData.startTime = bufferCompletTime
-                loadData.bufferCompleteTime =
-                    (!loadData.bufferCompleteTime || loadData.bufferCompleteTime < currentTime)?currentTime: loadData.bufferCompleteTime;
-
-                playerOffset = loadData.bufferCompleteTime - bufferData.startTime;
-                loadData.sourceAdioContextT0 = bufferData.audioContextT0;
-                loadData.resetTime = time;
-                state = "playing";
-            }
-  
-            sourceBuffer = audioContext.createBufferSource();
-            sourceBuffer.onend = audioBufferEnded;
-            sourceBuffer.buffer = audioBuffer;
-            sourceBuffer.connect(audioContext.destination);
-            playTime = loadData.bufferCompleteTime || playerOffset + bufferData.startTime;
+            // decode data
+            audioContext.decodeAudioData(body, function(buffer) {
+                source.buffer = buffer;
+                source.connect(audioContext.destination);
+                source.start();
+                setReceivedData(header, arrayBuffer, buffer);
+            });
             
-            completeTime = playTime+sourceBuffer.buffer.duration;
-            sourceBuffer.start(playTime);
-            
-            infoLog(11, "Current time:" + currentTime  );
-            infoLog(12, "BufferDataIndex  :"+ bufferData.bufferDataIndex );
-            infoLog(13, "ResetPlayerOffset:"+  resetPlayerOffset  );
-            infoLog(14, "Playing   @ :" + playTime  );
-            infoLog(15, "Last ends @ :" + loadData.bufferCompleteTime);
-            infoLog(16, "playerOffset:" + playerOffset  );
-            infoLog(17, "Buffer Size(seconds) :"+ sourceBuffer.buffer.duration);
-            infoLog(18, "CompleteTime(seconds):"+ completeTime);
-            
-            infoLog(19, "Source audioContextT0:"+bufferData.audioContextT0 );
-            infoLog(20, "bufferSize:"+bufferData.bufferSize+" * 4096 = "+ (bufferData.bufferSize * 4096)+" bytes => "+ (bufferData.bufferSize * 4096 * 0.000005669)+" seconds");
-            
-            if(loadData.lastBufferLoaded){
-                var timeBetweenBuffers = (time-loadData.lastBufferLoaded)/1000;
-                infoLog(21, "Time between buffers:"+ timeBetweenBuffers+" seconds" );
-                var latency = timeBetweenBuffers - sourceBuffer.buffer.duration;
-                infoLog(22, "Latency:"+ latency +" seconds");
-            }
-            if(playTime < audioContext.currentTime){
-                infoLog(23, "Late Buffer! index:"+ bufferData.index+"\t, by "+(audioContext.currentTime-playTime)+" seconds" );
-                if( (playTime + sourceBuffer.buffer.duration) <  audioContext.currentTime){
-                    infoLog(24, "Missed entire buffer! index:"+ bufferData.index+" seconds" );
-                }
-            }
-            if(bufferData.bufferDataIndex != (loadData.lastBufferIndex +1 ) ){
-                infoLog(25, "Recieved buffer out of order, recieved index:"+bufferData.bufferDataIndex+" expected:"+(loadData.lastBufferIndex+1));
-            }
-            loadData.lastBufferLoaded = time;
-            loadData.lastBufferIndex = bufferData.bufferDataIndex;
-            loadData.bufferCompleteTime = completeTime;
-        }
-        function onWorkerMessage(event){
-            var messageObject = event.data;
-            switch(messageObject.type){
-                case "bufferData":
-                    loadBufferData(messageObject.data.bufferData);
-                    break;
-            }
         }
         
         function init(){
             // internal properties
-            audioContext = VoipConnection.audioContext;
-            audioContextLevelNode = new AudioContextLevelNode();
-            audioContextLevelNode.scriptNode.connect(audioContext.destination);
-            worker = getPlayerWorker();
-            worker.onmessage = onWorkerMessage;
-            audioContext = VoipConnection.audioContext;
+            audioContext = VoipConnection.playAudioContext;
             // external properties  
             _this.addArrayBuffer = addArrayBuffer;
             state = "stopped";
-            Object.defineProperty(
-                _this,
-                "audioContextLevelNode",
-                {
-                    get:function(){return audioContextLevelNode;}
-                }
-            );
-            loadData = {};
         }
         var
             _this = this,
-            worker,
             audioContext,
-            playerOffset,
-            state,
-            audioContextLevelNode,
-            loadData
+            receivedData ={}
         ;
         init();
     }
@@ -228,7 +93,7 @@ VoipConnection = (function(){
                 //log('WebSocket Connected');
             };
             webSocket.onclose = function(arg) {
-                //log('WebSocket Closed '+arg);
+                log('WebSocket Closed '+arg);
             };
             webSocket.onmessage = function(e) {
                 onData(e.data);
@@ -237,12 +102,12 @@ VoipConnection = (function(){
         var sendTime;
         function send(arrayBuffer){
             // test delay
-            var delay = Math.floor(250 * Math.random() );
+            var delay = 0;//Math.floor(250 * Math.random() );
             setTimeout(
                 function(){
                     var time  = Date.now();
                     if(sendTime){
-                        infoLog(04, "Time between sending buffers:"+ ((time - sendTime)/1000) +" seconds");
+                        
                     }
                     webSocket.send(arrayBuffer);
                     sendTime = time;
@@ -263,123 +128,6 @@ VoipConnection = (function(){
         var
             _this = this,
             webSocket
-        ;
-        init();
-    }
-    function BroadcastAudioWorker(){
-        function log(message){
-            console.log(
-                "------------  AudioWorker ------------\n"+
-                message
-            );
-        }
-        function getNewBufferData(startTime){
-            
-            var
-                floatArrayDataBufferSize = bufferSize*4096/4, // samples of floats bufferSize in bytes/ 4 bytes per float
-                arrayBufferLength =
-                    // 16 bytes of Uint32s
-                    4 + // bytes for channel count
-                    4 + // bytes for sampleRate
-                    4 + // bytes for the buffer index
-                    4 + // bytes for the buffersize value ,  value * 4096 = buffersize
-                    
-                    // 8 bytes of Float32s
-                    4 + // bytes of the start time,
-                    4 + // source audioContext startTime time bytes of the start time, audioContextT0,
-                    
-                    // float Buffers
-                    (2 * floatArrayDataBufferSize * 4), // bytes for 2 channels * bufferSize value * 4096 * 4 bytes per float32
-                bufferData = {
-                    index : 0,
-                    arrayBuffer : new ArrayBuffer( arrayBufferLength )
-                },
-                bufferIndex = 0
-            ;
-            if(audioContextT0 === undefined){
-                audioContextT0 = startTime;
-                bufferDataIndex =0;
-            }
-            
-            // 12 bytes of Uint8s
-            bufferData.header = new Uint32Array(bufferData.arrayBuffer, bufferIndex , 4);
-            bufferData.header[0] = 2;// channel count
-            bufferData.header[1] = 44100;// samplerate
-            bufferData.header[2] = bufferDataIndex++;// bufferDataIndex
-            bufferData.header[3] = bufferSize;// bufferSize
-            bufferIndex += 16;
-            
-            // 8 bytes of Float32s
-            //                         new Float32Array( arraybuffer, offsets in bytes, length in floats)
-            bufferData.float32Buffer = new Float32Array(bufferData.arrayBuffer, bufferIndex, 2);
-            bufferData.float32Buffer[0] = startTime;
-            bufferData.float32Buffer[1] = audioContextT0;
-            bufferIndex += 8;
-            
-            bufferData.float32Buffer0 = new Float32Array(bufferData.arrayBuffer, bufferIndex, floatArrayDataBufferSize  );
-            bufferIndex += (floatArrayDataBufferSize * 4);
-            bufferData.float32Buffer1 = new Float32Array(bufferData.arrayBuffer, bufferIndex, floatArrayDataBufferSize );
-            return bufferData;
-        }
-        
-        function saveChannelData(bufferData){
-            if(!currentBuffer){
-                currentBuffer = getNewBufferData(bufferData.startTime);
-            }
-            currentBuffer.float32Buffer0.set(bufferData.channelData[0], currentBuffer.index);
-            currentBuffer.float32Buffer1.set(bufferData.channelData[1], currentBuffer.index);
-            currentBuffer.index += bufferData.channelData[0].length;
-            if(currentBuffer.index >= currentBuffer.float32Buffer0.length ){
-                completeBuffer = currentBuffer;
-                currentBuffer = getNewBufferData(bufferData.startTime);
-                sendBuffer(completeBuffer);
-            }
-        }
-        function sendBuffer(bufferData){
-            if(bufferData){
-                self.postMessage(
-                    {
-                        type:"bufferData",
-                        data:{ arrayBuffer:bufferData.arrayBuffer }
-                    }
-                );
-            }
-        }
-        function start(){
-            state = "started";
-        }
-        function stop(){
-            state = "stopped";
-            sendBuffers();
-        }
-        function onMessage(e){
-            var messageObject = e.data;
-            switch (messageObject.type) {
-                case "saveChannelData":
-                    saveChannelData(messageObject.data.bufferData);
-                    break;
-                case "bufferData":
-                    _this.bufferSize = messageObject.data.bufferSize;
-                    break;
-                case "start":
-                    start();
-                    break;
-                case "stop":
-                    stop();
-                    break;
-            }
-        }
-        
-        function  init(){
-            self.onmessage = onMessage;
-        }
-        var
-            bufferSize = 32,
-            state = "stopped",
-            currentBuffer,
-            completeBuffer,
-            audioContextT0,
-            bufferDataIndex = 0
         ;
         init();
     }
@@ -455,7 +203,7 @@ VoipConnection = (function(){
                 worker =  new Worker(getWorkerFunctionUrl())
             ;
             // set internal properties
-            audioContext = VoipConnection.audioContext;
+            audioContext = VoipConnection.broadcastAudioContext;
             worker.onmessage = onWorkerMessage;
             node = audioContext.createScriptProcessor(4096, 2, 2); // (bufferSize, inputChannels, outputChannels)
             node.onaudioprocess = function(e) {
@@ -506,54 +254,141 @@ VoipConnection = (function(){
         ;
         init();
     }
-    function VoipConnection(){
-        function getAudioWorker(){
-            var
-                workerString = ""+BroadcastAudioWorker,
-                index0,
-                index1,
-                blob
-            ;
-            index0 = workerString.indexOf('{');
-            index1 = workerString.lastIndexOf('}');
-            workerString = workerString.substring(index0+1, index1-1);
-            blob = new Blob([workerString], {type : 'application/javascript'});
-            return new Worker( URL.createObjectURL(blob) );
+    
+    function MediaStreamRecorder(mediaStream){
+        
+        function onData(arrayBuffer){
+            log("in MediaStreamRecorder default onData arrayBuffer:"+arrayBuffer.byteSize+"bytes.");
         }
-        function onWorkerMessage(event){
-             var
-                messageObject = event.data
-            ;
-            switch(messageObject.type){
-                case  "bufferData":
-                     // buffer is [l,r,l,r....]
-                    onWorkerData(messageObject.data.arrayBuffer);
-                    break;
+        function start(){
+            function getHeaderArrayBuffer(){
+                function timeToInts(time){
+                    var
+                        str = time.toString(16),
+                        result = []
+                    ;
+                    while(str.length<16){
+                        str = "0"+str;
+                    }
+                    result.push(parseInt(str.substring(0,8), 16));
+                    result.push(parseInt(str.substring(8), 16));
+                    return result;
+                }
+                
+                var
+                    header = {
+                        length:headerData.length,
+                        index:headerData.index++,
+                        sourceT0:timeToInts(headerData.sourceT0),
+                        startTime:timeToInts(Date.now())
+                    },
+                    result = new ArrayBuffer(header.length*4),
+                    int32Array = new Int32Array(result)
+                ;
+                int32Array[0] = header.length;
+                int32Array[1] = header.index;
+                int32Array[2] = header.sourceT0[0];
+                int32Array[3] = header.sourceT0[1];
+                int32Array[4] = header.startTime[0];
+                int32Array[5] = header.startTime[1];
+                return result;
             }
+            function startRecorder(){
+                headerArrayBuffer = getHeaderArrayBuffer();
+                mediaRecorder.start();
+                setTimeout(  intervalTimeout, bufferInterval*1000 );
+            }
+            function intervalTimeout(){
+                mediaRecorder.stop();
+            }
+            function ondataavailable(e){
+                var
+                    fileReader = new FileReader(),
+                    blob
+                ;
+                if(e.data.size > 0 ){
+                    blob = new Blob([headerArrayBuffer, e.data]);
+                    fileReader.onload = function() {
+                        _this.onData(this.result);
+                    };
+                    fileReader.readAsArrayBuffer(blob);
+                }
+                startRecorder();
+            }
+            var
+                mediaRecorder,
+                bufferInterval = 0.1, // in seconds,
+                headerArrayBuffer
+            ;
+            mediaRecorder = new MediaRecorder(mediaStream);
+            mediaRecorder.ondataavailable = ondataavailable;
+            startRecorder();
         }
+        function init(){
+            headerData = {
+                length:6,
+                index:0,
+                sourceT0:Date.now(),
+                startTime: 0
+            };
+            _this.onData = onData;
+            _this.start = start;
+        }
+        var
+            _this = this,
+            headerData
+        ;
+        init();
+        
+    }
+    function VoipConnection(){
         function start(){
             if(node){
                 node.disconnect();
             }
             if(mediaStream){
-                mediaStream.connect(node);
-                //node.connect(audioContext.destination);
+                var
+                    sourceNode = audioContext.createMediaStreamSource(mediaStream)
+                ;
+                sourceNode.connect(node);
                 for(var i=0; i< recordingLevelDivs.length; i++){
                     recordingLevelDivs[0].audioNode = node;
                 }
+                var mediaStreamRecorder = new MediaStreamRecorder(mediaStream);
+                mediaStreamRecorder.onData = onWorkerData;
+                mediaStreamRecorder.start();
             }
         }
         function stop(){
             node.disconnect();
             node = undefined;
         }
+        function setSentData(arrayBuffer){
+            var
+                header = VoipConnection.getHeader(arrayBuffer),
+                sourceT0 = new Date(header.sourceTime0),
+                startTime = new Date(header.startTime),
+                sendTime = Date.now()
+            ;
+            
+            infoLog(1,"Index:"+header.index);
+            infoLog(2,"Source T0:"+sourceT0);
+            infoLog(3,"startTime:"+startTime);
+            if(sendData.lastSent !== undefined){
+                infoLog(4,"Time between sending buffers:"+ (sendTime-sendData.lastSent));
+            }
+            infoLog(5,"Buffer size :"+ arrayBuffer.byteLength);
+            sendData.lastSent =  sendTime;
+        }
         function onWorkerData(arrayBuffer){
             connection.send(arrayBuffer);
+            setSentData(arrayBuffer);
+            //var bufferData = new AudioArrayBuffer(arrayBuffer);
+            //infoLog(1, "Sending buffer index:"+ bufferData.index);
         }
         function onConnectionData(arrayBuffer){
             voipPlayer.addArrayBuffer(arrayBuffer);
         }
-        
         function getLevelDiv(){
             function setMaxs(levels){
                 var
@@ -690,59 +525,60 @@ VoipConnection = (function(){
             recordingLevelDivs.push(level_div);
             return level_div;
         }
-        function getPlaybackLevelDiv(){
-            var level_div = getLevelDiv();
-            level_div.audioContextLevelNode = voipPlayer.audioContextLevelNode;
-            level_div.audioNode = VoipConnection.audioContext.destination;
-            return level_div;
-        }
-        
         // ----------- VoipConnection -----------
         function init(){
             // set internal properties ----------------------------
             connection = new WebSocketConnection();
             connection.onData = onConnectionData;
             voipPlayer = new VoipPlayer();
-            worker = getAudioWorker();
-            worker.onmessage = onWorkerMessage;
+            //worker = getAudioWorker();
+            //worker.onmessage = onWorkerMessage;
             recordingLevelDivs = [];
-            node = audioContext.createScriptProcessor(4096, 2, 2); // (bufferSize, inputChannels, outputChannels)
+            node = audioContext.createScriptProcessor(audioArrayBufferInfoData.audioBufferSize, 2, 2); // (bufferSize, inputChannels, outputChannels)
+            
             var audioprocessTime;
             node.onaudioprocess = function(e) {
                 var
+                    inputBuffer = e.inputBuffer,
                     bufferData = {
                         channelData:[],
-                        startTime:this.context.currentTime
+                        startTime:audioContext.currentTime - inputBuffer.duration
                     },
                     channelData,
                     c,
                     time= Date.now()
                 ;
                 if(audioprocessTime){
-                    infoLog(1, "Time between audioprocess:"+ ((time - audioprocessTime)/1000 )+" seconds.");
+                    
                 }
-                for (c = 0; c < 2; c++) {
-                    channelData = e.inputBuffer.getChannelData(c);
-                    bufferData.channelData.push(
-                        channelData
-                    );
-                    e.outputBuffer.copyToChannel(channelData, c);
-                }
-                worker.postMessage(
-                    {
-                        type:"saveChannelData",
-                        data:{ bufferData:bufferData }
-                    }
+                setTimeout(
+                    function(){
+                        
+                        for (c = 0; c < audioArrayBufferInfoData.channelCount; c++) {
+                            channelData = e.inputBuffer.getChannelData(c);
+                            bufferData.channelData.push(
+                                channelData
+                            );
+                        }
+                        /*
+                        worker.postMessage(
+                            {
+                                type:"saveChannelData",
+                                data:{ bufferData:bufferData }
+                            }
+                        );
+                        */
+                    }, inputBuffer.duration*2/3*1000 // delay is to make sure all of the buffer is collected.
                 );
+                for (c = 0; c < 2; c++) {
+                    e.outputBuffer.copyToChannel(e.inputBuffer.getChannelData(c), c);
+                }
                 audioprocessTime = time;
             };
-
             // set external properties ----------------------------
             _this.startBroadcasting = start;
             _this.stopBroadcCasting = stop;
-            
             _this.getRecordingLevelDiv = getRecordingLevelDiv;
-            _this.getPlaybackLevelDiv  = getPlaybackLevelDiv;
             
             Object.defineProperty(
                 _this,
@@ -776,8 +612,8 @@ VoipConnection = (function(){
                             currentBufferSize = value;
                             worker.postMessage(
                                 {
-                                    type:"setBufferSize",
-                                    data:{ bufferSize:currentBufferSize }
+                                    type:"bufferSize",
+                                    bufferSize:currentBufferSize
                                 }
                             );
                         }
@@ -789,25 +625,58 @@ VoipConnection = (function(){
             _this = this,
             worker,
             node,
-            audioContext = VoipConnection.audioContext,
+            audioContext = VoipConnection.broadcastAudioContext,
             connection,
             // buffer size based on 2 channel and 44100hz
             // min from sample is 4096 -> 44.1 samples/chanel every ms -> 4410-> (93ms) aprox 100ms sample size  93ms
             // 
-            currentBufferSize = 4,// aprox 400ms sample buffer size = currentBufferSize*4096,
+            currentBufferSize = 1,// aprox 400ms sample buffer size = currentBufferSize*4096,
             voipPlayer,
             mediaStream,
-            recordingLevelDivs
+            recordingLevelDivs,
+            audioArrayBufferInfoData = {
+                channelCount : 1,
+                sampleRate : 44100,
+                bufferIndex : 0,
+                audioBufferSize:4096,
+                audioBufferCount:4,
+                startTime:0,
+                audioContextT0:0
+            },
+            sendData = {}
         ;
         init();
     }
+    VoipConnection.getHeader = function(arraybuffer){
+        function getTimeFromInts(int32Array){
+            var
+                str = "0x"+int32Array[0].toString(16),
+                str1 = int32Array[1].toString(16)
+            ;
+            while(str1.length<8){
+                str1 = "0"+str1;
+            }
+            return Number(str+str1);
+        }
+        var
+            header = {
+                length:new Int32Array(arraybuffer, 0, 1)[0],
+                index:new Int32Array(arraybuffer, 4, 1)[0]
+            },
+            sourceTime0 = getTimeFromInts( new Int32Array(arraybuffer, 8, 2) ),
+            startTime  = getTimeFromInts( new Int32Array(arraybuffer, 16, 2) )
+        ;
+        header.sourceTime0 = sourceTime0;
+        header.startTime = startTime;
+        return header;
+    };
     VoipConnection.getMicrophoneStream = function(callback){
         navigator.mediaDevices.getUserMedia({"audio":true})
             .then(
                 function(stream){
                     var
-                        audioCtx = VoipConnection.audioContext;
-                        mediaStream = audioCtx.createMediaStreamSource(stream)
+                        audioContext =VoipConnection.broadcastAudioContext;
+                        mediaStream = audioContext.createMediaStreamSource(stream)
                     ;
                     userAudioSource = mediaStream;
                     setTimeout( ()=>{callback(undefined, mediaStream);}, 0);
@@ -817,16 +686,16 @@ VoipConnection = (function(){
             }
         );
     };
-    VoipConnection.getAudioBuffer = function(bufferData){
+    VoipConnection.getAudioBuffer = function(audioContext, bufferData){
         var
-            audioContext = VoipConnection.audioContext,
             audioBuffer = audioContext.createBuffer( bufferData.channelCount, bufferData.sampleCount, bufferData.sampleRate)
         ;
         audioBuffer.copyToChannel(bufferData.float32Buffer0, 0);
         audioBuffer.copyToChannel(bufferData.float32Buffer1, 1);
         return audioBuffer;
     };
-    VoipConnection.audioContext = new AudioContext();
+    VoipConnection.playAudioContext = new AudioContext();
+    VoipConnection.broadcastAudioContext = new AudioContext();
     VoipConnection.getBufferData = function(arrayBuffer){
         var
             result = {
