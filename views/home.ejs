@@ -10,6 +10,7 @@
         <div class = "sendSignal_div">
           <label>Record Levels</label>
         </div>
+        <label>Default audio source</label><br>
         <audio class = "testAudio" src = "nobodyHome.mp4" controls></audio>
         <div class = "info_div">
           <label class = "info_label">Send Data:</label><br>
@@ -38,6 +39,21 @@
           <label class = "info_label">info23</label><br>
           <label class = "info_label">info24</label><br>
           <label class = "info_label">info25</label><br>
+          <label class = "info_label">info26</label><br>
+          <label class = "info_label">info27</label><br>
+          <label class = "info_label">info28</label><br>
+          <label class = "info_label">info29</label><br>
+          <label class = "info_label">info30</label><br>
+          <label class = "info_label">info31</label><br>
+          <label class = "info_label">info32</label><br>
+          <label class = "info_label">info33</label><br>
+          <label class = "info_label">info34</label><br>
+          <label class = "info_label">info35</label><br>
+          <label class = "info_label">info36</label><br>
+          <label class = "info_label">info37</label><br>
+          <label class = "info_label">info38</label><br>
+          <label class = "info_label">info39</label><br>
+          <label class = "info_label">info40</label><br>
         </div>
     </div>
   <script>
@@ -63,10 +79,19 @@
               function(error, stream){
                 if(error){
                   var  audio = document.getElementsByClassName("testAudio")[0];
-                  stream = VoipConnection.audioContext.createMediaElementSource(audio);
-                  voipConnection.mediaStream = stream;
+                  audio.onplay = function(){
+                    if(audio.captureStream){
+                        stream = audio.captureStream();
+                    }else if(audio.mozCaptureStream){
+                        stream = audio.mozCaptureStream();
+                    }else{
+                        alert("capture stream not available!!!!!");
+                        throw "capture stream not available!!!!!";
+                    }
+                    voipConnection.mediaStream = stream;
+                    voipConnection.startBroadcasting();
+                  };
                   audio.play();
-                  voipConnection.startBroadcasting();
                 }else{
                   voipConnection.mediaStream = stream;
                   voipConnection.startBroadcasting();
