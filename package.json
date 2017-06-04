@@ -1,0 +1,21 @@
+{
+  "name": "voipDemo",
+  "version": "1.0.0",
+  "description": "Voip with PPT (push to talk)",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "nuf",
+    "voip",
+    "ppt"
+  ],
+  "author": "nuf",
+  "license": "MIT",
+  "dependencies": {
+    "body-parser": "^1.17.2",
+    "express": "^4.15.3",
+    "websocket": "^1.0.24"
+  }
+}
